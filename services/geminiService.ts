@@ -1,5 +1,5 @@
 
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, Modality } from "@google/genai";
 import { SYSTEM_INSTRUCTION } from "../constants";
 import { FormData, UserPlan, FeatureType, AIResponseData } from "../types";
 
@@ -65,6 +65,9 @@ export const generateContent = async (
       objective: formData.objective || "Awareness",
       hook_style: formData.hookStyle || "Emotional",
       target_audience: formData.targetAudience || "General Public",
+      // New Reel Specific Inputs
+      voice_gender: formData.voiceGender || "Female",
+      visual_style: formData.visualStyle || "Cinematic",
       count: 1 // Internal logic handles variations based on plan
     }
   };
@@ -101,21 +104,28 @@ export const generateContent = async (
       // Robust CLEANUP
       text = text.trim();
       
-      // Extract JSON if embedded in other text
+      // Attempt to extract JSON if embedded in other text
+      // We look for the first '{' and the last '}' to handle any preamble/postamble
       const jsonStart = text.indexOf('{');
       const jsonEnd = text.lastIndexOf('}');
       if (jsonStart !== -1 && jsonEnd !== -1) {
           text = text.substring(jsonStart, jsonEnd + 1);
       } else {
-        // Fallback cleanup for markdown
-        if (text.startsWith("```json")) {
-            text = text.replace(/^```json\s*/, "").replace(/\s*```$/, "");
-        } else if (text.startsWith("```")) {
-            text = text.replace(/^```\s*/, "").replace(/\s*```$/, "");
-        }
+         // Fallback: Sometimes models output markdown code blocks even with MIME type set
+         // This is a backup cleanup
+         text = text.replace(/```json/g, "").replace(/```/g, "").trim();
       }
 
-      const jsonResponse = JSON.parse(text) as AIResponseData;
+      let jsonResponse: AIResponseData;
+      try {
+        jsonResponse = JSON.parse(text) as AIResponseData;
+      } catch (parseError) {
+        console.error("JSON Parse Error:", parseError, "Text:", text);
+        // If strict parsing fails, try a looser regex extraction for keys if needed, 
+        // but usually checking the prompt or model config is better. 
+        // For now, we throw to trigger retry.
+        throw new Error("Invalid JSON format received from AI");
+      }
 
       // Check for backend-style errors embedded in success response if any
       if (!jsonResponse.success && !jsonResponse.error) {
@@ -142,7 +152,7 @@ export const generateContent = async (
           user_plan: userPlan,
           data: {},
           code: "API_ERROR",
-          message: "Something went wrong generating your content. Please try again."
+          message: "We faced a glitch generating your content. Please try clicking 'Generate' again."
         };
       }
       // Wait a bit before retry (exponential backoff not strictly needed for 2 attempts, but good practice)
@@ -193,3 +203,78 @@ export const generateMarketingImage = async (
     return null;
   }
 };
+
+export const generateReelVideo = async (prompt: string): Promise<string | null> => {
+  // Check API Key first using the provided logic
+  if (window.aistudio) {
+      const hasKey = await window.aistudio.hasSelectedApiKey();
+      if (!hasKey) {
+          const success = await window.aistudio.openSelectKey();
+          if (!success) return null;
+      }
+  }
+
+  // Create new instance with potentially new key (important for Veo key selection flow)
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY }); 
+  
+  try {
+    let operation = await ai.models.generateVideos({
+      model: 'veo-3.1-fast-generate-preview',
+      prompt: prompt,
+      config: {
+        numberOfVideos: 1,
+        resolution: '720p',
+        aspectRatio: '9:16'
+      }
+    });
+
+    while (!operation.done) {
+      await new Promise(resolve => setTimeout(resolve, 5000)); // 5s poll
+      operation = await ai.operations.getVideosOperation({operation: operation});
+    }
+
+    const videoUri = operation.response?.generatedVideos?.[0]?.video?.uri;
+    if (videoUri) {
+        return `${videoUri}&key=${process.env.API_KEY}`;
+    }
+    return null;
+  } catch (e: any) {
+    console.error("Video Generation Error", e);
+    // If "Requested entity was not found" -> reset key
+    const errorMessage = e?.message || "";
+    if (errorMessage.includes("Requested entity was not found") && window.aistudio) {
+        await window.aistudio.openSelectKey();
+    }
+    return null;
+  }
+}
+
+export const generateReelAudio = async (text: string, gender: 'Male' | 'Female' | 'Duo'): Promise<string | null> => {
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    // Map gender to voices
+    const voiceName = gender === 'Male' ? 'Fenrir' : 'Kore'; 
+    
+    try {
+        const response = await ai.models.generateContent({
+            model: "gemini-2.5-flash-preview-tts",
+            contents: [{ parts: [{ text: text }] }],
+            config: {
+                responseModalities: [Modality.AUDIO],
+                speechConfig: {
+                    voiceConfig: {
+                        prebuiltVoiceConfig: { voiceName: voiceName },
+                    },
+                },
+            },
+        });
+        
+        const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+        if (base64Audio) {
+            return `data:audio/mp3;base64,${base64Audio}`;
+        }
+        return null;
+    } catch (e) {
+        console.error("Audio Generation Error", e);
+        return null;
+    }
+}

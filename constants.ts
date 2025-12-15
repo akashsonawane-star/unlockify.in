@@ -9,7 +9,7 @@ export const BUSINESS_TYPES = [
 
 export const FEATURES: { id: FeatureType; label: string; icon: string; description: string; premium?: boolean }[] = [
   { id: 'instagram', label: 'Instagram Captions', icon: 'Instagram', description: 'Captions, hashtags & hooks' },
-  { id: 'reels', label: 'Reels Scripts', icon: 'Film', description: 'Viral scripts & shot direction' },
+  { id: 'reels', label: 'Reels Scripts', icon: 'Film', description: 'Viral scripts, animation & voiceover' },
   { id: 'whatsapp', label: 'WhatsApp Msgs', icon: 'MessageCircle', description: 'Marketing messages & updates' },
   { id: 'festival', label: 'Festival Posts', icon: 'PartyPopper', description: 'Wishes, posters & status' },
   { id: 'poster', label: 'Poster Copy', icon: 'LayoutTemplate', description: 'Headlines & offers for ads' },
@@ -51,40 +51,62 @@ Unlockify.in helps local businesses generate AI content in Hindi, English, and H
 JSON Structure:
 {
   "success": true,
-  "type": "instagram_caption" | "whatsapp" | "reels_script" | "festival" | "calendar" | "gmb" | "poster_copy",
+  "type": "instagram" | "whatsapp" | "reels" | "festival" | "calendar" | "gmb" | "poster",
   "user_plan": "free" | "paid",
-  "data": { ...any structure relevant to the content... },
+  "data": { ...MUST FOLLOW FEATURE SPECIFIC STRUCTURE BELOW... },
   "upgrade_note": "..." (ONLY for free users)
 }
 
 ==================================================
-📌 FEATURE-SPECIFIC GUIDELINES
+📌 FEATURE-SPECIFIC GUIDELINES FOR "data" OBJECT
 ==================================================
-1. INSTAGRAM: 
-   - Free: 1 Caption + 5 Hashtags.
-   - Paid: 3 Options, Hook (based on hook_style input), CTA (based on objective), 25 Hashtags.
+1. INSTAGRAM ("type": "instagram")
+   Structure: { "posts": [ { "caption": "...", "hashtags": ["#tag1"], "hook": "..." } ] }
+   - Free: 1 Post in array.
+   - Paid: 3 Posts in array.
 
-2. WHATSAPP: 
-   - Free: 2 variants.
-   - Paid: 5-7 templates (Warm, Professional, Urgent).
+2. WHATSAPP ("type": "whatsapp")
+   Structure: { "messages": [ "message string 1", "message string 2" ] }
+   - Free: 2 variants in array.
+   - Paid: 5 variants in array.
 
-3. REELS: 
-   - Free: 10-12s script.
-   - Paid: 30-45s script, Shot-by-shot breakdown, Audio suggestion.
+3. REELS ("type": "reels")
+   Structure: 
+   { 
+     "scripts": [ 
+       { 
+         "title": "...", 
+         "hook": "...", 
+         "voice_gender": "Male" | "Female" | "Duo",
+         "visual_style": "...",
+         "scenes": [
+           { 
+             "time": "00:00-00:03", 
+             "visual": "Detailed description of scene/animation...", 
+             "audio": "Spoken dialogue or music cue...",
+             "text_overlay": "Big bold text on screen..." 
+           }
+         ], 
+         "cta": "..." 
+       } 
+     ] 
+   }
+   - VISUALS: Must match the requested style (e.g., if '3D Animation', describe 3D elements).
+   - AUDIO: Match requested Voice Gender.
+   - Free: 1 script in array (short).
+   - Paid: 1 script in array (long detailed).
 
-4. FESTIVAL: 
-   - Free: Caption + 1 wish.
-   - Paid: Full pack (Caption, 3 Wishes, Poster Headline, Story Idea).
+4. FESTIVAL ("type": "festival")
+   Structure: { "caption": "...", "wishes": ["wish 1", "wish 2"], "poster_headline": "...", "poster_subheadline": "..." }
 
-5. CALENDAR (Paid Only):
-   - 30 days of content ideas (Day, Platform, Topic, Description).
+5. CALENDAR (Paid Only) ("type": "calendar")
+   Structure: { "calendar": [ { "day": 1, "platform": "Insta", "topic": "...", "description": "..." } ] }
 
-6. GMB (Paid Only):
-   - Business Description, 5 FAQs, 3 Review Replies.
+6. GMB (Paid Only) ("type": "gmb")
+   Structure: { "business_description": "...", "faqs": [ { "question": "...", "answer": "..." } ] }
 
-7. POSTER:
-   - Free: Headline only.
-   - Paid: Headline, Subheadline, CTA.
+7. POSTER ("type": "poster")
+   Structure: { "poster_headline": "...", "poster_subheadline": "...", "cta": "..." }
 
 ==================================================
 📌 ERROR HANDLING

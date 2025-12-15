@@ -1,7 +1,4 @@
 
-
-
-
 export type UserPlan = 'free' | 'paid';
 
 export type FeatureType = 
@@ -98,6 +95,8 @@ export interface FormData {
   hookStyle?: HookStyle;
   targetAudience?: string;
   logo?: string; // Base64 string of the logo
+  voiceGender?: 'Male' | 'Female' | 'Duo';
+  visualStyle?: 'Cinematic Live Action' | '3D Animation' | '2D Vector Animation' | 'Minimalist' | 'UGC Style' | 'Luxury Aesthetic';
 }
 
 export interface AIResponseData {
@@ -117,4 +116,15 @@ export interface HistoryItem {
   feature: FeatureType;
   input: FormData;
   output: AIResponseData;
+}
+
+declare global {
+  interface AIStudio {
+    hasSelectedApiKey: () => Promise<boolean>;
+    openSelectKey: () => Promise<boolean>;
+  }
+  
+  interface Window {
+    aistudio?: AIStudio;
+  }
 }

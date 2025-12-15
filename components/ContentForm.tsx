@@ -1,10 +1,7 @@
-
-
-
 import React, { useState, useEffect, useRef } from 'react';
 import { FeatureType, FormData, UserPlan } from '../types';
 import { BUSINESS_TYPES } from '../constants';
-import { Loader2, Sparkles, Lock, Upload, X, Image as ImageIcon } from 'lucide-react';
+import { Loader2, Sparkles, Lock, Upload, X, Image as ImageIcon, Mic, Clapperboard } from 'lucide-react';
 
 interface ContentFormProps {
   feature: FeatureType;
@@ -31,6 +28,8 @@ export const ContentForm: React.FC<ContentFormProps> = ({ feature, userPlan, isL
     objective: 'Awareness',
     hookStyle: 'Emotional',
     targetAudience: 'General Public',
+    voiceGender: 'Female',
+    visualStyle: 'Cinematic Live Action',
     logo: ''
   });
 
@@ -254,10 +253,49 @@ export const ContentForm: React.FC<ContentFormProps> = ({ feature, userPlan, isL
               className="w-full rounded-xl border-slate-200 bg-slate-50 p-3 focus:border-[#6E27FF] focus:ring-[#6E27FF] text-slate-700 outline-none"
             >
               <option value="15s">15 Seconds</option>
-              <option value="30s">30 Seconds (Pro)</option>
+              <option value="30s">30 Seconds</option>
               <option value="45s">45 Seconds (Pro)</option>
             </select>
           </div>
+        )}
+
+        {/* REELS SPECIFIC CONFIGS (Voice/Style) */}
+        {feature === 'reels' && (
+          <>
+             <div>
+               <label className="block text-sm font-semibold text-slate-700 mb-2 flex items-center gap-2">
+                 <Mic className="w-4 h-4 text-purple-600" /> Voice Gender
+               </label>
+               <select 
+                 name="voiceGender" 
+                 value={formData.voiceGender} 
+                 onChange={handleChange}
+                 className="w-full rounded-xl border-slate-200 bg-slate-50 p-3 focus:border-[#6E27FF] focus:ring-[#6E27FF] text-slate-700 outline-none"
+               >
+                 <option value="Female">Female</option>
+                 <option value="Male">Male</option>
+                 <option value="Duo">Duo (Male & Female)</option>
+               </select>
+             </div>
+             <div>
+               <label className="block text-sm font-semibold text-slate-700 mb-2 flex items-center gap-2">
+                 <Clapperboard className="w-4 h-4 text-purple-600" /> Visual Style
+               </label>
+               <select 
+                 name="visualStyle" 
+                 value={formData.visualStyle} 
+                 onChange={handleChange}
+                 className="w-full rounded-xl border-slate-200 bg-slate-50 p-3 focus:border-[#6E27FF] focus:ring-[#6E27FF] text-slate-700 outline-none"
+               >
+                 <option value="Cinematic Live Action">Cinematic Live Action</option>
+                 <option value="3D Animation">3D Animation</option>
+                 <option value="2D Vector Animation">2D Vector Animation</option>
+                 <option value="Minimalist">Minimalist / Text-focused</option>
+                 <option value="UGC Style">UGC / Selfie Style</option>
+                 <option value="Luxury Aesthetic">Luxury Aesthetic</option>
+               </select>
+             </div>
+          </>
         )}
 
         {/* Festival Name (Only for Festival) */}
