@@ -18,6 +18,7 @@ export type ViewState =
   | 'support'
   | 'terms'
   | 'admin' // New Admin State
+  | 'notifications' // New Notification Page
   | FeatureType;
 
 export type Language = 'Hindi' | 'English' | 'Hinglish';
@@ -121,7 +122,7 @@ export interface HistoryItem {
 declare global {
   interface AIStudio {
     hasSelectedApiKey: () => Promise<boolean>;
-    openSelectKey: () => Promise<boolean>;
+    openSelectKey: () => Promise<void>;
   }
   
   interface Window {

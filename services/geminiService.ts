@@ -209,8 +209,7 @@ export const generateReelVideo = async (prompt: string): Promise<string | null> 
   if (window.aistudio) {
       const hasKey = await window.aistudio.hasSelectedApiKey();
       if (!hasKey) {
-          const success = await window.aistudio.openSelectKey();
-          if (!success) return null;
+          await window.aistudio.openSelectKey();
       }
   }
 

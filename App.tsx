@@ -15,6 +15,7 @@ import { SupportPage } from './components/SupportPage';
 import { LegalPage } from './components/LegalPage';
 import { AdminPanel } from './components/AdminPanel';
 import { SEOManager } from './components/SEOManager';
+import { NotificationPage } from './components/NotificationPage';
 import { Loader2, Filter, Edit, RefreshCw, Trash2 } from 'lucide-react';
 
 export const App = () => {
@@ -154,12 +155,12 @@ export const App = () => {
   };
 
   const handleFormSubmit = (formData: FormData) => {
-    if (['dashboard', 'saved', 'landing', 'profile', 'subscription', 'support', 'terms', 'admin'].includes(currentView)) return;
+    if (['dashboard', 'saved', 'landing', 'profile', 'subscription', 'support', 'terms', 'admin', 'notifications'].includes(currentView)) return;
     handleGenerate(currentView as FeatureType, formData);
   };
 
   const handleRegenerate = () => {
-    if (lastFormData && !['dashboard', 'saved', 'landing', 'profile', 'subscription', 'support', 'terms', 'admin'].includes(currentView)) {
+    if (lastFormData && !['dashboard', 'saved', 'landing', 'profile', 'subscription', 'support', 'terms', 'admin', 'notifications'].includes(currentView)) {
         handleGenerate(currentView as FeatureType, lastFormData);
     }
   };
@@ -179,7 +180,7 @@ export const App = () => {
   const getInitialFormData = (): FormData | null => {
     if (editingFormData) return editingFormData;
     
-    if (!['dashboard', 'saved', 'landing', 'profile', 'subscription', 'support', 'terms', 'admin'].includes(currentView)) {
+    if (!['dashboard', 'saved', 'landing', 'profile', 'subscription', 'support', 'terms', 'admin', 'notifications'].includes(currentView)) {
       return {
         businessName: userProfile.businessName,
         businessType: userProfile.businessType,
@@ -256,6 +257,9 @@ export const App = () => {
       
       case 'terms':
         return <LegalPage onNavigate={handleNavigate} />;
+
+      case 'notifications':
+        return <NotificationPage onNavigate={handleNavigate} />;
 
       case 'saved':
         const filteredHistory = savedFilter === 'all' 

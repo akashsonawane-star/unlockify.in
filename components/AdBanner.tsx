@@ -1,4 +1,3 @@
-
 import React, { useEffect } from 'react';
 
 interface AdBannerProps {
@@ -22,20 +21,17 @@ export const AdBanner: React.FC<AdBannerProps> = ({ slotId, format = 'auto', lay
 
   return (
     <div className="w-full my-6 flex justify-center bg-slate-50 border border-slate-100 rounded-lg overflow-hidden min-h-[100px] items-center text-xs text-slate-400">
-      {/* 
-         NOTE: Replace 'ca-pub-YOUR_ADSENSE_ID' below with your real ID 
-         in a real deployment.
-      */}
       <ins
         className="adsbygoogle"
         style={{ display: 'block', width: '100%', textAlign: 'center' }}
-        data-ad-client="ca-pub-YOUR_ADSENSE_ID" 
+        data-ad-client="ca-pub-5400888645138874" 
         data-ad-slot={slotId}
         data-ad-format={format}
         data-full-width-responsive="true"
         {...(layoutKey ? { 'data-ad-layout-key': layoutKey } : {})}
       >
       </ins>
+      {/* Fallback label if ad doesn't load immediately */}
       <span className="hidden">Advertisement</span>
     </div>
   );

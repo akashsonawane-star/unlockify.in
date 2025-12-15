@@ -71,8 +71,8 @@ export const DashboardHome: React.FC<DashboardHomeProps> = ({ onNavigate, recent
         </div>
       </section>
 
-      {/* AdSense Unit (Placeholder for Dashboard) */}
-      <AdBanner slotId="1234567890" />
+      {/* AdSense Unit */}
+      <AdBanner slotId="9337377427" />
 
       {/* Upgrade Banner */}
       <div className="relative rounded-2xl overflow-hidden shadow-lg group">

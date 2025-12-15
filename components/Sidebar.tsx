@@ -76,7 +76,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onViewChange, isO
             })}
 
             <div className="pt-4 pb-2 px-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">
-              Library
+              Library & Tools
             </div>
 
             <button
@@ -89,6 +89,18 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onViewChange, isO
             >
               <Icons.Bookmark className={`w-5 h-5 ${currentView === 'saved' ? 'text-[#6E27FF]' : 'text-slate-400'}`} />
               Saved Content
+            </button>
+
+            <button
+              onClick={() => { onViewChange('notifications'); onCloseMobile(); }}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                currentView === 'notifications'
+                  ? 'bg-slate-50 text-[#6E27FF]'
+                  : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+              }`}
+            >
+              <Icons.BellRing className={`w-5 h-5 ${currentView === 'notifications' ? 'text-[#6E27FF]' : 'text-slate-400'}`} />
+              Festival Reminders
             </button>
 
           </nav>
