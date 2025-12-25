@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { ViewState, HistoryItem } from '../types';
 import * as Icons from 'lucide-react';
@@ -9,19 +8,21 @@ import { AdBanner } from './AdBanner';
 interface DashboardHomeProps {
   onNavigate: (view: ViewState) => void;
   recentHistory: HistoryItem[];
+  userName?: string;
 }
 
-export const DashboardHome: React.FC<DashboardHomeProps> = ({ onNavigate, recentHistory }) => {
+export const DashboardHome: React.FC<DashboardHomeProps> = ({ onNavigate, recentHistory, userName }) => {
   // Get time greeting
   const hour = new Date().getHours();
   const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
+  const displayName = userName || 'there';
 
   return (
     <div className="max-w-6xl mx-auto space-y-10 animate-fade-in pb-10">
       
       {/* Header */}
       <div>
-        <h1 className="text-2xl md:text-3xl font-heading font-bold text-slate-900">{greeting}, Amit! 👋</h1>
+        <h1 className="text-2xl md:text-3xl font-heading font-bold text-slate-900">{greeting}, {displayName}! 👋</h1>
         <p className="text-slate-500 mt-2">Ready to grow your local business today?</p>
       </div>
 

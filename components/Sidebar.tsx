@@ -1,7 +1,6 @@
-
 import React from 'react';
 import { FEATURES } from '../constants';
-import { ViewState } from '../types';
+import { ViewState, UserProfile } from '../types';
 import * as Icons from 'lucide-react';
 import { BrandLogo } from './BrandLogo';
 
@@ -10,9 +9,10 @@ interface SidebarProps {
   onViewChange: (view: ViewState) => void;
   isOpen: boolean;
   onCloseMobile: () => void;
+  userProfile: UserProfile;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ currentView, onViewChange, isOpen, onCloseMobile }) => {
+export const Sidebar: React.FC<SidebarProps> = ({ currentView, onViewChange, isOpen, onCloseMobile, userProfile }) => {
   return (
     <>
       {/* Mobile Overlay */}
@@ -51,7 +51,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onViewChange, isO
             </div>
 
             {FEATURES.map((feature) => {
-              const Icon = Icons[feature.icon as keyof typeof Icons] || Icons.Circle;
+              const Icon = (Icons as any)[feature.icon] || Icons.Circle;
               const isActive = currentView === feature.id;
               
               return (
@@ -112,10 +112,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onViewChange, isO
               className={`flex items-center gap-3 w-full p-2 rounded-lg transition-colors ${currentView === 'profile' ? 'bg-slate-100' : 'hover:bg-slate-50'}`}
             >
               <div className="w-9 h-9 rounded-full bg-slate-200 overflow-hidden border border-slate-300">
-                <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Felix" alt="User" className="w-full h-full" />
+                <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${userProfile.email}`} alt="User" className="w-full h-full" />
               </div>
               <div className="text-left flex-1 min-w-0">
-                <div className="text-sm font-semibold text-slate-700 truncate">Amit Sharma</div>
+                <div className="text-sm font-semibold text-slate-700 truncate">{userProfile.name || 'User'}</div>
                 <div className="text-xs text-slate-500 truncate">Manage Profile</div>
               </div>
               <Icons.Settings className={`w-4 h-4 ${currentView === 'profile' ? 'text-[#6E27FF]' : 'text-slate-400'}`} />

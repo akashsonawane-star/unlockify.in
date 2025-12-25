@@ -81,6 +81,8 @@ export interface UserProfile {
   businessType: string;
   city: string;
   defaultLanguage: Language;
+  // Added plan property to fix type error in dbService
+  plan?: UserPlan;
 }
 
 export interface FormData {

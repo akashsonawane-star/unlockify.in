@@ -1,55 +1,17 @@
-
 import { GoogleGenAI, Modality } from "@google/genai";
 import { SYSTEM_INSTRUCTION } from "../constants";
 import { FormData, UserPlan, FeatureType, AIResponseData } from "../types";
 
-// Initialize Gemini
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-
-// Mock limit tracking for Free users
-const DAILY_LIMIT = 5;
-
-const checkFreeLimit = (): boolean => {
-  const today = new Date().toISOString().split('T')[0];
-  const storageKey = `unlockify_limit_${today}`;
-  const currentCount = parseInt(localStorage.getItem(storageKey) || '0', 10);
-  
-  if (currentCount >= DAILY_LIMIT) {
-    return false;
-  }
-  
-  return true;
-};
-
-const incrementFreeLimit = () => {
-  const today = new Date().toISOString().split('T')[0];
-  const storageKey = `unlockify_limit_${today}`;
-  const currentCount = parseInt(localStorage.getItem(storageKey) || '0', 10);
-  localStorage.setItem(storageKey, (currentCount + 1).toString());
-};
-
+// Removed global 'ai' instance to avoid stale API keys as per guidelines
 export const generateContent = async (
   feature: FeatureType,
   formData: FormData,
   userPlan: UserPlan
 ): Promise<AIResponseData> => {
-  
-  // 1. Simulate Backend Logic for Free Limits
-  if (userPlan === 'free') {
-    if (!checkFreeLimit()) {
-      return {
-        success: false,
-        error: true,
-        type: feature,
-        user_plan: 'free',
-        data: {},
-        code: "LIMIT_REACHED",
-        message: "Your daily AI limit (5/5) is over. Upgrade to generate unlimited content."
-      };
-    }
-  }
+  // Always create a new instance right before making an API call to ensure it uses the latest API key
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
-  // 2. Construct the input JSON for the model
+  // 1. Construct the input JSON for the model
   const promptInput = {
     user_plan: userPlan,
     feature: feature,
@@ -79,7 +41,8 @@ export const generateContent = async (
     attempts++;
     try {
       const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
+        // Updated model to gemini-3-flash-preview for text-based tasks
+        model: 'gemini-3-flash-preview',
         contents: JSON.stringify(promptInput),
         config: {
           systemInstruction: SYSTEM_INSTRUCTION,
@@ -133,11 +96,6 @@ export const generateContent = async (
          throw new Error(jsonResponse.message || "AI indicated failure");
       }
 
-      // Increment usage if successful and user is free
-      if (userPlan === 'free' && jsonResponse.success) {
-        incrementFreeLimit();
-      }
-
       return jsonResponse;
 
     } catch (error) {
@@ -155,7 +113,7 @@ export const generateContent = async (
           message: "We faced a glitch generating your content. Please try clicking 'Generate' again."
         };
       }
-      // Wait a bit before retry (exponential backoff not strictly needed for 2 attempts, but good practice)
+      // Wait a bit before retry
       await new Promise(resolve => setTimeout(resolve, 1000));
     }
   }
@@ -176,6 +134,8 @@ export const generateMarketingImage = async (
   aspectRatio: '1:1' | '9:16' = '1:1'
 ): Promise<string | null> => {
   try {
+    // Re-initialize for dynamic key selection compliance
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash-image',
       contents: {
@@ -249,6 +209,7 @@ export const generateReelVideo = async (prompt: string): Promise<string | null> 
 }
 
 export const generateReelAudio = async (text: string, gender: 'Male' | 'Female' | 'Duo'): Promise<string | null> => {
+    // Re-initialize for dynamic key selection compliance
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     // Map gender to voices
     const voiceName = gender === 'Male' ? 'Fenrir' : 'Kore'; 
@@ -269,6 +230,7 @@ export const generateReelAudio = async (text: string, gender: 'Male' | 'Female' 
         
         const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
         if (base64Audio) {
+            // Note: Returning as data:audio/mp3;base64 for simple consumption, though raw bytes are PCM
             return `data:audio/mp3;base64,${base64Audio}`;
         }
         return null;

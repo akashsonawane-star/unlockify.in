@@ -2,6 +2,8 @@
 import React, { useState, useEffect } from 'react';
 import { ViewState, UserPlan, FormData, AIResponseData, HistoryItem, FeatureType, UserProfile } from './types';
 import { generateContent } from './services/geminiService';
+import { dbService } from './services/dbService';
+import { supabase } from './services/supabaseClient';
 import { FEATURES } from './constants';
 import { Sidebar } from './components/Sidebar';
 import { TopBar } from './components/TopBar';
@@ -16,57 +18,28 @@ import { LegalPage } from './components/LegalPage';
 import { AdminPanel } from './components/AdminPanel';
 import { SEOManager } from './components/SEOManager';
 import { NotificationPage } from './components/NotificationPage';
+import * as Icons from 'lucide-react';
 import { Loader2, Filter, Edit, RefreshCw, Trash2 } from 'lucide-react';
 
 export const App = () => {
-  // 1. Auth & Persistence Initialization
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
-    try { return localStorage.getItem('unlockify_auth') === 'true'; } catch { return false; }
-  });
-
+  const [session, setSession] = useState<any>(null);
+  const [authLoading, setAuthLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState<boolean>(false);
+  const [authError, setAuthError] = useState<string | null>(null);
 
-  const [currentView, setCurrentView] = useState<ViewState>(() => {
-    return isAuthenticated ? 'dashboard' : 'landing';
+  const [currentView, setCurrentView] = useState<ViewState>('dashboard');
+  const [userPlan, setUserPlan] = useState<UserPlan>('free');
+  const [userProfile, setUserProfile] = useState<UserProfile>({
+    name: '',
+    email: '',
+    phone: '',
+    businessName: '',
+    businessType: 'Salon',
+    city: '',
+    defaultLanguage: 'Hinglish'
   });
 
-  const [userPlan, setUserPlan] = useState<UserPlan>(() => {
-    try { return (localStorage.getItem('unlockify_plan') as UserPlan) || 'free'; } catch { return 'free'; }
-  });
-  
-  // User Profile State with Persistence
-  const [userProfile, setUserProfile] = useState<UserProfile>(() => {
-    try {
-      const saved = localStorage.getItem('unlockify_profile');
-      return saved ? JSON.parse(saved) : {
-        name: 'Amit Sharma',
-        email: 'amit@example.com',
-        phone: '9876543210',
-        businessName: 'Glow Salon',
-        businessType: 'Salon',
-        city: 'Mumbai',
-        defaultLanguage: 'Hinglish'
-      };
-    } catch {
-      return {
-        name: 'Amit Sharma',
-        email: 'amit@example.com',
-        phone: '9876543210',
-        businessName: 'Glow Salon',
-        businessType: 'Salon',
-        city: 'Mumbai',
-        defaultLanguage: 'Hinglish'
-      };
-    }
-  });
-
-  const [history, setHistory] = useState<HistoryItem[]>(() => {
-    try {
-      const saved = localStorage.getItem('unlockify_history');
-      return saved ? JSON.parse(saved) : [];
-    } catch { return []; }
-  });
-
+  const [history, setHistory] = useState<HistoryItem[]>([]);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [result, setResult] = useState<AIResponseData | null>(null);
@@ -74,36 +47,174 @@ export const App = () => {
   const [editingFormData, setEditingFormData] = useState<FormData | null>(null);
   const [savedFilter, setSavedFilter] = useState<FeatureType | 'all'>('all');
 
-  // Persistence Effects
   useEffect(() => {
-    try { localStorage.setItem('unlockify_plan', userPlan); } catch {}
-  }, [userPlan]);
+    const initializeAuth = async () => {
+      try {
+        const { data: { session }, error } = await supabase.auth.getSession();
+        if (error) throw error;
+        setSession(session);
+      } catch (e: any) {
+        console.error("Auth init error:", e.message || e);
+      } finally {
+        setAuthLoading(false);
+      }
+    };
+
+    initializeAuth();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      setSession(session);
+      if (session) {
+          setAuthLoading(false);
+          setAuthError(null);
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
 
   useEffect(() => {
-    try { localStorage.setItem('unlockify_profile', JSON.stringify(userProfile)); } catch {}
-  }, [userProfile]);
+    if (session?.user) {
+      loadUserData(session.user.id, session.user.email);
+    }
+  }, [session]);
 
-  useEffect(() => {
-    try { localStorage.setItem('unlockify_history', JSON.stringify(history)); } catch {}
-  }, [history]);
+  const loadUserData = async (userId: string, email?: string) => {
+     try {
+         if(email === 'admin@unlockify.in') {
+             setIsAdmin(true);
+             setCurrentView('admin');
+         }
 
-  const handleLogin = (email?: string) => {
-    setIsAuthenticated(true);
-    try { localStorage.setItem('unlockify_auth', 'true'); } catch {}
-    
-    // Check if logging in as Admin
-    if (email === 'admin@unlockify.in') {
-        setIsAdmin(true);
-        setCurrentView('admin');
-    } else {
-        setIsAdmin(false);
-        setCurrentView('dashboard');
+         // Load Profile
+         try {
+            const profile = await dbService.getUserProfile(userId);
+            if (profile) {
+                setUserProfile(profile);
+                setUserPlan((profile as any).plan || 'free');
+            } else {
+                const initialProfile: UserProfile = {
+                    name: email?.split('@')[0] || 'User',
+                    email: email || '',
+                    phone: '',
+                    businessName: '',
+                    businessType: 'Salon',
+                    city: '',
+                    defaultLanguage: 'Hinglish',
+                    plan: 'free'
+                };
+                
+                // Real DB save for non-demo users
+                if (!userId.startsWith('demo-user-')) {
+                    try {
+                        await dbService.updateUserProfile(userId, initialProfile);
+                        setUserProfile(initialProfile);
+                    } catch (profileError: any) {
+                        console.warn("Profile init sync error:", profileError.message || profileError);
+                        setUserProfile(initialProfile);
+                    }
+                } else {
+                    setUserProfile(initialProfile);
+                }
+            }
+         } catch (profileFetchError: any) {
+            console.error("Error fetching profile:", profileFetchError.message || profileFetchError);
+         }
+
+         // Load History
+         if (!userId.startsWith('demo-user-')) {
+            try {
+                const historyData = await dbService.getHistory(userId);
+                setHistory(historyData);
+            } catch (historyError: any) {
+                console.error("Error loading history:", historyError.message || historyError);
+            }
+         }
+
+     } catch (e: any) {
+         console.error("Critical error loading user data:", e.message || e);
+     }
+  };
+
+  const handleSignUp = async (email: string, pass: string, name: string) => {
+    setAuthError(null);
+    try {
+        const { data, error } = await supabase.auth.signUp({
+            email,
+            password: pass,
+            options: { 
+              data: { full_name: name },
+              emailRedirectTo: window.location.origin
+            }
+        });
+        
+        if (error) throw error;
+        return data;
+    } catch (error: any) {
+        const message = error.message || "Signup failed. Please try again.";
+        setAuthError(message);
+        throw error;
     }
   };
 
-  const handleLogout = () => {
-    try { localStorage.removeItem('unlockify_auth'); } catch {}
-    setIsAuthenticated(false);
+  const handleSignIn = async (email: string, pass: string) => {
+    setAuthError(null);
+    try {
+        const { data, error } = await supabase.auth.signInWithPassword({ email, password: pass });
+        if (error) {
+            if (error.message.toLowerCase().includes('confirm')) {
+                throw new Error("Email not confirmed. Please check your inbox for the verification link.");
+            }
+            throw error;
+        }
+        return data;
+    } catch (error: any) {
+        const message = error.message || "Login failed. Check your credentials.";
+        setAuthError(message);
+        throw error;
+    }
+  };
+
+  const handleGuestLogin = async (email: string, name: string) => {
+    const mockSession = {
+        user: {
+            id: 'demo-user-' + Math.random().toString(36).substr(2, 9),
+            email: email,
+            user_metadata: { full_name: name }
+        },
+        access_token: 'demo-token'
+    };
+    setSession(mockSession);
+    setUserProfile(prev => ({ 
+        ...prev, 
+        name, 
+        email,
+        businessName: 'Demo Business',
+        city: 'Mumbai' 
+    }));
+    setCurrentView('dashboard');
+  };
+
+  const handleResendVerification = async (email: string) => {
+    try {
+        const { error } = await supabase.auth.resend({
+            type: 'signup',
+            email: email,
+            options: {
+              emailRedirectTo: window.location.origin
+            }
+        });
+        if (error) throw error;
+        return true;
+    } catch (error: any) {
+        setAuthError(error.message);
+        return false;
+    }
+  };
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    setSession(null);
     setIsAdmin(false);
     setCurrentView('landing');
   };
@@ -114,7 +225,53 @@ export const App = () => {
     setEditingFormData(null);
   };
 
+  const handleEditSaved = (item: HistoryItem) => {
+    setEditingFormData(item.input);
+    setResult(null);
+    setCurrentView(item.feature);
+  };
+
+  const handleRegenerateSaved = (item: HistoryItem) => {
+    setEditingFormData(item.input);
+    setCurrentView(item.feature);
+    handleGenerate(item.feature, item.input);
+  };
+
+  const handleUpdateProfile = async (newProfile: UserProfile) => {
+      if(!session?.user) return;
+      if (session.user.id.startsWith('demo-user-')) {
+          setUserProfile(newProfile);
+          return;
+      }
+      try {
+          await dbService.updateUserProfile(session.user.id, newProfile);
+          setUserProfile(newProfile);
+      } catch (e: any) {
+          console.error("Update profile failed", e.message || e);
+          alert("Failed to update profile.");
+      }
+  };
+
   const handleGenerate = async (feature: FeatureType, formData: FormData) => {
+    if(!session?.user) return;
+
+    if (userPlan === 'free') {
+        const today = new Date().toDateString();
+        const todayCount = history.filter(h => new Date(h.timestamp).toDateString() === today).length;
+        if (todayCount >= 5) {
+            setResult({
+                success: false,
+                error: true,
+                type: feature,
+                user_plan: 'free',
+                data: {},
+                code: "LIMIT_REACHED",
+                message: "You've reached your free daily limit. Upgrade to Growth Plan for unlimited content."
+            });
+            return;
+        }
+    }
+
     setIsLoading(true);
     setResult(null);
     setLastFormData(formData);
@@ -123,18 +280,33 @@ export const App = () => {
       const response = await generateContent(feature, formData, userPlan);
       setResult(response);
       
-      if (response.success) {
+      if (response.success && !session.user.id.startsWith('demo-user-')) {
         const newItem: HistoryItem = {
-          id: Date.now().toString(),
+          id: '', 
           timestamp: Date.now(),
           feature: feature,
           input: formData,
           output: response
         };
-        setHistory(prev => [newItem, ...prev]);
+        
+        try {
+            const savedItem = await dbService.addToHistory(session.user.id, newItem);
+            if(savedItem) {
+                 const frontendItem: HistoryItem = {
+                     id: savedItem.id,
+                     timestamp: new Date(savedItem.created_at).getTime(),
+                     feature: savedItem.feature,
+                     input: savedItem.input_data,
+                     output: savedItem.output_data
+                 };
+                 setHistory(prev => [frontendItem, ...prev]);
+            }
+        } catch (dbErr) {
+            console.warn("History save error:", dbErr);
+        }
       }
-    } catch (error) {
-      console.error(error);
+    } catch (error: any) {
+      console.error(error.message || error);
       setResult({
         success: false,
         type: feature,
@@ -148,9 +320,14 @@ export const App = () => {
     }
   };
 
-  const handleDeleteHistory = (id: string) => {
+  const handleDeleteHistory = async (id: string) => {
      if(confirm('Are you sure you want to delete this item?')) {
-        setHistory(prev => prev.filter(item => item.id !== id));
+        try {
+            await dbService.deleteHistory(id);
+            setHistory(prev => prev.filter(item => item.id !== id));
+        } catch(e: any) {
+            alert("Failed to delete item.");
+        }
      }
   };
 
@@ -159,54 +336,32 @@ export const App = () => {
     handleGenerate(currentView as FeatureType, formData);
   };
 
-  const handleRegenerate = () => {
-    if (lastFormData && !['dashboard', 'saved', 'landing', 'profile', 'subscription', 'support', 'terms', 'admin', 'notifications'].includes(currentView)) {
-        handleGenerate(currentView as FeatureType, lastFormData);
-    }
-  };
+  if (authLoading) {
+      return (
+          <div className="h-screen w-full flex items-center justify-center bg-[#F7F9FC]">
+              <div className="text-center">
+                <Loader2 className="w-10 h-10 text-[#6E27FF] animate-spin mx-auto mb-4" />
+                <p className="text-slate-500 font-medium">Authenticating...</p>
+              </div>
+          </div>
+      );
+  }
 
-  const handleEditSaved = (item: HistoryItem) => {
-      setEditingFormData(item.input);
-      setCurrentView(item.feature);
-      setResult(null);
-  };
-
-  const handleRegenerateSaved = (item: HistoryItem) => {
-      setEditingFormData(item.input);
-      setCurrentView(item.feature);
-      handleGenerate(item.feature, item.input);
-  };
-
-  const getInitialFormData = (): FormData | null => {
-    if (editingFormData) return editingFormData;
-    
-    if (!['dashboard', 'saved', 'landing', 'profile', 'subscription', 'support', 'terms', 'admin', 'notifications'].includes(currentView)) {
-      return {
-        businessName: userProfile.businessName,
-        businessType: userProfile.businessType,
-        city: userProfile.city,
-        language: userProfile.defaultLanguage,
-        tone: 'Friendly',
-        offerDetails: '',
-        duration: '15s',
-        objective: 'Awareness',
-        hookStyle: 'Emotional',
-        targetAudience: 'General Public'
-      };
-    }
-    return null;
-  };
-
-  if (!isAuthenticated || currentView === 'landing') {
+  if (!session) {
     return (
       <>
         <SEOManager view="landing" />
-        <LandingPage onStart={handleLogin} />
+        <LandingPage 
+          onSignUp={handleSignUp} 
+          onSignIn={handleSignIn} 
+          onResendVerification={handleResendVerification}
+          onGuestLogin={handleGuestLogin}
+          authError={authError}
+        />
       </>
     );
   }
 
-  // Admin View Logic
   if (isAdmin || currentView === 'admin') {
       return (
         <>
@@ -228,6 +383,7 @@ export const App = () => {
           <DashboardHome 
             onNavigate={handleNavigate} 
             recentHistory={history} 
+            userName={userProfile.name}
           />
         );
       
@@ -236,7 +392,7 @@ export const App = () => {
           <ProfilePage 
             userProfile={userProfile} 
             userPlan={userPlan} 
-            onUpdateProfile={setUserProfile} 
+            onUpdateProfile={handleUpdateProfile} 
             onUpgrade={() => handleNavigate('subscription')} 
             onLogout={handleLogout}
             onNavigate={handleNavigate}
@@ -371,7 +527,6 @@ export const App = () => {
         );
       
       default:
-        // Render Feature Page
         const featureDef = FEATURES.find(f => f.id === currentView);
         if (!featureDef) return <div>Feature not found</div>;
 
@@ -391,7 +546,14 @@ export const App = () => {
                  userPlan={userPlan}
                  isLoading={isLoading}
                  onSubmit={handleFormSubmit}
-                 initialData={getInitialFormData()}
+                 initialData={editingFormData || {
+                    businessName: userProfile.businessName,
+                    businessType: userProfile.businessType,
+                    city: userProfile.city,
+                    language: userProfile.defaultLanguage,
+                    tone: 'Friendly',
+                    offerDetails: '',
+                 }}
                />
             </div>
             <div className="lg:col-span-7">
@@ -399,7 +561,7 @@ export const App = () => {
                   <ResultDisplay 
                     result={result} 
                     feature={currentView as FeatureType} 
-                    onRegenerate={handleRegenerate}
+                    onRegenerate={() => handleGenerate(currentView as FeatureType, lastFormData!)}
                     isRegenerating={isLoading}
                     formData={lastFormData}
                   />
@@ -414,7 +576,7 @@ export const App = () => {
                      ) : (
                         <>
                             <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center mb-4 text-slate-300">
-                                {React.createElement(featureDef.icon as any || Loader2, { className: "w-8 h-8" })}
+                                {React.createElement((Icons as any)[featureDef.icon] || Loader2, { className: "w-8 h-8" })}
                             </div>
                             <h3 className="text-lg font-bold text-slate-700">Ready to Create?</h3>
                             <p className="text-slate-400 max-w-xs mt-2 text-sm">Fill out the details on the left and let AI generate professional content for you.</p>
@@ -437,6 +599,7 @@ export const App = () => {
           onViewChange={handleNavigate} 
           isOpen={isSidebarOpen}
           onCloseMobile={() => setIsSidebarOpen(false)}
+          userProfile={userProfile}
         />
       )}
       <div className="flex-1 flex flex-col h-full overflow-hidden">
