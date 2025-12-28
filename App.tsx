@@ -54,7 +54,7 @@ export const App = () => {
         if (error) throw error;
         setSession(session);
       } catch (e: any) {
-        console.error("Auth init error:", e.message || e);
+        console.error("Supabase Auth Init Failed:", e.message || e);
       } finally {
         setAuthLoading(false);
       }
@@ -62,7 +62,7 @@ export const App = () => {
 
     initializeAuth();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       setSession(session);
       if (session) {
           setAuthLoading(false);
@@ -81,58 +81,55 @@ export const App = () => {
 
   const loadUserData = async (userId: string, email?: string) => {
      try {
-         if(email === 'admin@unlockify.in') {
+         // Check for admin
+         if(email === 'admin@unlockify.in' || email === 'unlockify.in@gmail.com') {
              setIsAdmin(true);
              setCurrentView('admin');
          }
 
-         // Load Profile
+         // Load Profile with Fallback
+         const initialProfile: UserProfile = {
+            name: session?.user?.user_metadata?.full_name || email?.split('@')[0] || 'User',
+            email: email || '',
+            phone: '',
+            businessName: '',
+            businessType: 'Salon',
+            city: '',
+            defaultLanguage: 'Hinglish',
+            plan: 'free'
+         };
+
          try {
             const profile = await dbService.getUserProfile(userId);
             if (profile) {
                 setUserProfile(profile);
                 setUserPlan((profile as any).plan || 'free');
             } else {
-                const initialProfile: UserProfile = {
-                    name: email?.split('@')[0] || 'User',
-                    email: email || '',
-                    phone: '',
-                    businessName: '',
-                    businessType: 'Salon',
-                    city: '',
-                    defaultLanguage: 'Hinglish',
-                    plan: 'free'
-                };
-                
-                // Real DB save for non-demo users
+                // Try to create profile if doesn't exist
                 if (!userId.startsWith('demo-user-')) {
-                    try {
-                        await dbService.updateUserProfile(userId, initialProfile);
-                        setUserProfile(initialProfile);
-                    } catch (profileError: any) {
-                        console.warn("Profile init sync error:", profileError.message || profileError);
-                        setUserProfile(initialProfile);
-                    }
-                } else {
-                    setUserProfile(initialProfile);
+                    await dbService.updateUserProfile(userId, initialProfile);
                 }
+                setUserProfile(initialProfile);
             }
-         } catch (profileFetchError: any) {
-            console.error("Error fetching profile:", profileFetchError.message || profileFetchError);
+         } catch (dbErr: any) {
+            console.warn("DB Profiles Table issue (Did you run the SQL?):", dbErr.message);
+            // Fallback to local profile to keep app running
+            setUserProfile(initialProfile);
          }
 
-         // Load History
+         // Load History with Fallback
          if (!userId.startsWith('demo-user-')) {
             try {
                 const historyData = await dbService.getHistory(userId);
                 setHistory(historyData);
             } catch (historyError: any) {
-                console.error("Error loading history:", historyError.message || historyError);
+                console.warn("DB History Table issue:", historyError.message);
+                setHistory([]);
             }
          }
 
      } catch (e: any) {
-         console.error("Critical error loading user data:", e.message || e);
+         console.error("Critical User Load Error:", e.message || e);
      }
   };
 
@@ -148,11 +145,12 @@ export const App = () => {
             }
         });
         
-        if (error) throw error;
+        if (error) {
+            setAuthError(error.message);
+            throw error;
+        }
         return data;
     } catch (error: any) {
-        const message = error.message || "Signup failed. Please try again.";
-        setAuthError(message);
         throw error;
     }
   };
@@ -162,15 +160,11 @@ export const App = () => {
     try {
         const { data, error } = await supabase.auth.signInWithPassword({ email, password: pass });
         if (error) {
-            if (error.message.toLowerCase().includes('confirm')) {
-                throw new Error("Email not confirmed. Please check your inbox for the verification link.");
-            }
+            setAuthError(error.message);
             throw error;
         }
         return data;
     } catch (error: any) {
-        const message = error.message || "Login failed. Check your credentials.";
-        setAuthError(message);
         throw error;
     }
   };
@@ -247,8 +241,8 @@ export const App = () => {
           await dbService.updateUserProfile(session.user.id, newProfile);
           setUserProfile(newProfile);
       } catch (e: any) {
-          console.error("Update profile failed", e.message || e);
-          alert("Failed to update profile.");
+          console.error("Profile Save Error:", e.message);
+          alert("Could not save profile. Check Supabase RLS policies.");
       }
   };
 
@@ -266,7 +260,7 @@ export const App = () => {
                 user_plan: 'free',
                 data: {},
                 code: "LIMIT_REACHED",
-                message: "You've reached your free daily limit. Upgrade to Growth Plan for unlimited content."
+                message: "Daily limit reached. Upgrade for more generations."
             });
             return;
         }
@@ -302,18 +296,17 @@ export const App = () => {
                  setHistory(prev => [frontendItem, ...prev]);
             }
         } catch (dbErr) {
-            console.warn("History save error:", dbErr);
+            console.warn("History Save Failed. Check 'history' table.");
         }
       }
     } catch (error: any) {
-      console.error(error.message || error);
       setResult({
         success: false,
         type: feature,
         user_plan: userPlan,
         data: {},
         error: true,
-        message: "An unexpected error occurred. Please try again."
+        message: "AI logic error. Please retry."
       });
     } finally {
       setIsLoading(false);
@@ -321,12 +314,12 @@ export const App = () => {
   };
 
   const handleDeleteHistory = async (id: string) => {
-     if(confirm('Are you sure you want to delete this item?')) {
+     if(confirm('Delete this saved content?')) {
         try {
             await dbService.deleteHistory(id);
             setHistory(prev => prev.filter(item => item.id !== id));
         } catch(e: any) {
-            alert("Failed to delete item.");
+            alert("Delete failed. " + e.message);
         }
      }
   };
@@ -341,7 +334,7 @@ export const App = () => {
           <div className="h-screen w-full flex items-center justify-center bg-[#F7F9FC]">
               <div className="text-center">
                 <Loader2 className="w-10 h-10 text-[#6E27FF] animate-spin mx-auto mb-4" />
-                <p className="text-slate-500 font-medium">Authenticating...</p>
+                <p className="text-slate-500 font-medium">Booting System...</p>
               </div>
           </div>
       );
@@ -379,211 +372,60 @@ export const App = () => {
   const renderMainContent = () => {
     switch (currentView) {
       case 'dashboard':
-        return (
-          <DashboardHome 
-            onNavigate={handleNavigate} 
-            recentHistory={history} 
-            userName={userProfile.name}
-          />
-        );
-      
+        return <DashboardHome onNavigate={handleNavigate} recentHistory={history} userName={userProfile.name} />;
       case 'profile':
-        return (
-          <ProfilePage 
-            userProfile={userProfile} 
-            userPlan={userPlan} 
-            onUpdateProfile={handleUpdateProfile} 
-            onUpgrade={() => handleNavigate('subscription')} 
-            onLogout={handleLogout}
-            onNavigate={handleNavigate}
-          />
-        );
-      
+        return <ProfilePage userProfile={userProfile} userPlan={userPlan} onUpdateProfile={handleUpdateProfile} onUpgrade={() => handleNavigate('subscription')} onLogout={handleLogout} onNavigate={handleNavigate} />;
       case 'subscription':
-        return (
-          <SubscriptionPage 
-            userPlan={userPlan} 
-            onUpgrade={() => setUserPlan('paid')} 
-            onNavigate={handleNavigate}
-          />
-        );
-
+        return <SubscriptionPage userPlan={userPlan} onUpgrade={() => setUserPlan('paid')} onNavigate={handleNavigate} />;
       case 'support':
         return <SupportPage onNavigate={handleNavigate} />;
-      
       case 'terms':
         return <LegalPage onNavigate={handleNavigate} />;
-
       case 'notifications':
         return <NotificationPage onNavigate={handleNavigate} />;
-
       case 'saved':
-        const filteredHistory = savedFilter === 'all' 
-            ? history 
-            : history.filter(h => h.feature === savedFilter);
-
+        const filteredHistory = savedFilter === 'all' ? history : history.filter(h => h.feature === savedFilter);
         return (
           <div className="max-w-5xl mx-auto space-y-8 animate-fade-in">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                <div>
-                    <h2 className="text-2xl font-bold font-heading text-slate-900">Saved Library</h2>
-                    <p className="text-slate-500 text-sm mt-1">Manage and repurpose your past content.</p>
-                </div>
-                
+                <h2 className="text-2xl font-bold font-heading text-slate-900">Saved Library</h2>
                 <div className="flex items-center gap-2 bg-white p-1 rounded-xl border border-slate-200 overflow-x-auto max-w-full">
-                    <button 
-                      onClick={() => setSavedFilter('all')}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-colors ${savedFilter === 'all' ? 'bg-slate-900 text-white' : 'text-slate-500 hover:bg-slate-50'}`}
-                    >
-                      All
-                    </button>
+                    <button onClick={() => setSavedFilter('all')} className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap ${savedFilter === 'all' ? 'bg-slate-900 text-white' : 'text-slate-500'}`}>All</button>
                     {FEATURES.map(f => (
-                      <button 
-                        key={f.id}
-                        onClick={() => setSavedFilter(f.id)}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-colors ${savedFilter === f.id ? 'bg-[#6E27FF] text-white' : 'text-slate-500 hover:bg-slate-50'}`}
-                      >
-                        {f.label.split(' ')[0]}
-                      </button>
+                      <button key={f.id} onClick={() => setSavedFilter(f.id)} className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap ${savedFilter === f.id ? 'bg-[#6E27FF] text-white' : 'text-slate-500'}`}>{f.label.split(' ')[0]}</button>
                     ))}
                 </div>
             </div>
-
             {filteredHistory.length === 0 ? (
-               <div className="bg-white rounded-3xl p-16 text-center border border-dashed border-slate-300">
-                  <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4 text-slate-400">
-                     <Filter className="w-8 h-8" />
-                  </div>
-                  <h3 className="text-lg font-bold text-slate-700">No saved content found</h3>
-                  <p className="text-slate-500 text-sm mt-1 mb-6">Create something amazing to see it here.</p>
-                  <button onClick={() => setCurrentView('dashboard')} className="px-6 py-2.5 bg-slate-900 text-white rounded-full font-bold text-sm">Create New</button>
-               </div>
+               <div className="bg-white rounded-3xl p-16 text-center border border-dashed border-slate-300"><p className="text-slate-500 text-sm">Library is empty.</p></div>
             ) : (
                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {filteredHistory.map((item) => {
-                      const featureDef = FEATURES.find(f => f.id === item.feature);
-                      const getPreview = (data: any) => {
-                          if (!data) return "No preview";
-                          if (item.feature === 'instagram') return data.caption || data.posts?.[0]?.caption || "Caption...";
-                          if (item.feature === 'whatsapp') return data.variants?.[0] || data.messages?.[0]?.text || "Message...";
-                          if (item.feature === 'reels') return data.script || data.scripts?.[0]?.script || "Script...";
-                          if (item.feature === 'festival') return data.caption || "Festival wish...";
-                          return "Click to view content";
-                      };
-
-                      return (
-                          <div key={item.id} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow group flex flex-col h-full relative">
-                               <button 
-                                  onClick={() => handleDeleteHistory(item.id)}
-                                  className="absolute top-4 right-4 p-2 bg-white/80 hover:bg-red-50 text-slate-400 hover:text-red-500 rounded-lg transition-colors z-10 opacity-0 group-hover:opacity-100"
-                                  title="Delete"
-                               >
-                                  <Trash2 className="w-4 h-4" />
-                               </button>
-                               
-                               <div className="flex justify-between items-start mb-4">
-                                   <div className="flex items-center gap-3">
-                                       <div className="w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center text-slate-600">
-                                           <span className="font-bold text-xs">{item.feature.slice(0,2).toUpperCase()}</span>
-                                       </div>
-                                       <div>
-                                           <h4 className="font-bold text-slate-800 text-sm">{featureDef?.label || item.feature}</h4>
-                                           <p className="text-xs text-slate-500">{new Date(item.timestamp).toLocaleDateString()}</p>
-                                       </div>
-                                   </div>
-                                   <div className="px-2 py-1 bg-slate-50 border border-slate-100 rounded text-[10px] font-mono text-slate-500">
-                                       {item.input.language}
-                                   </div>
-                               </div>
-
-                               <div className="flex-1 bg-slate-50 rounded-xl p-4 mb-4 border border-slate-100 overflow-hidden relative">
-                                   <p className="text-xs text-slate-600 line-clamp-4 leading-relaxed font-medium">
-                                       {getPreview(item.output.data)}
-                                   </p>
-                                   <div className="absolute bottom-0 left-0 w-full h-8 bg-gradient-to-t from-slate-50 to-transparent"></div>
-                               </div>
-
-                               <div className="flex items-center gap-3 pt-2 border-t border-slate-100">
-                                   <button 
-                                     onClick={() => handleEditSaved(item)}
-                                     className="flex-1 flex items-center justify-center gap-2 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50 rounded-lg transition-colors"
-                                   >
-                                      <Edit className="w-3.5 h-3.5" /> Edit
-                                   </button>
-                                   <div className="w-px h-4 bg-slate-200"></div>
-                                   <button 
-                                     onClick={() => handleRegenerateSaved(item)}
-                                     className="flex-1 flex items-center justify-center gap-2 py-2 text-xs font-bold text-[#6E27FF] hover:bg-purple-50 rounded-lg transition-colors"
-                                   >
-                                      <RefreshCw className="w-3.5 h-3.5" /> Regenerate
-                                   </button>
-                               </div>
+                  {filteredHistory.map((item) => (
+                      <div key={item.id} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm relative group">
+                          <button onClick={() => handleDeleteHistory(item.id)} className="absolute top-4 right-4 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 className="w-4 h-4" /></button>
+                          <div className="font-bold text-slate-800 text-sm mb-1">{FEATURES.find(f => f.id === item.feature)?.label}</div>
+                          <div className="text-[10px] text-slate-400 mb-3">{new Date(item.timestamp).toLocaleDateString()}</div>
+                          <div className="text-xs text-slate-600 line-clamp-3 mb-4">{JSON.stringify(item.output.data)}</div>
+                          <div className="flex gap-4">
+                              <button onClick={() => handleEditSaved(item)} className="text-[11px] font-bold text-[#6E27FF] hover:underline">Edit Input</button>
+                              <button onClick={() => handleRegenerateSaved(item)} className="text-[11px] font-bold text-slate-500 hover:underline">Regenerate</button>
                           </div>
-                      );
-                  })}
+                      </div>
+                  ))}
                </div>
             )}
           </div>
         );
-      
       default:
         const featureDef = FEATURES.find(f => f.id === currentView);
         if (!featureDef) return <div>Feature not found</div>;
-
         return (
           <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-            <div className="lg:hidden col-span-1 mb-2">
-               <h2 className="text-xl font-bold text-slate-900">{featureDef.label}</h2>
-            </div>
-            <div className="lg:col-span-5 space-y-6">
-               <div className="hidden lg:block mb-2">
-                   <h2 className="text-2xl font-heading font-bold text-slate-900">{featureDef.label}</h2>
-                   <p className="text-slate-500 text-sm mt-1">{featureDef.description}</p>
-               </div>
-               
-               <ContentForm 
-                 feature={currentView as FeatureType} 
-                 userPlan={userPlan}
-                 isLoading={isLoading}
-                 onSubmit={handleFormSubmit}
-                 initialData={editingFormData || {
-                    businessName: userProfile.businessName,
-                    businessType: userProfile.businessType,
-                    city: userProfile.city,
-                    language: userProfile.defaultLanguage,
-                    tone: 'Friendly',
-                    offerDetails: '',
-                 }}
-               />
+            <div className="lg:col-span-5">
+               <ContentForm feature={currentView as FeatureType} userPlan={userPlan} isLoading={isLoading} onSubmit={handleFormSubmit} initialData={editingFormData || { businessName: userProfile.businessName, businessType: userProfile.businessType, city: userProfile.city, language: userProfile.defaultLanguage, tone: 'Friendly', offerDetails: '', }} />
             </div>
             <div className="lg:col-span-7">
-               {result ? (
-                  <ResultDisplay 
-                    result={result} 
-                    feature={currentView as FeatureType} 
-                    onRegenerate={() => handleGenerate(currentView as FeatureType, lastFormData!)}
-                    isRegenerating={isLoading}
-                    formData={lastFormData}
-                  />
-               ) : (
-                  <div className="h-full min-h-[400px] flex flex-col items-center justify-center bg-white/50 border-2 border-dashed border-slate-200 rounded-3xl p-8 text-center">
-                     {isLoading ? (
-                        <div className="flex flex-col items-center animate-pulse">
-                            <div className="w-16 h-16 bg-slate-200 rounded-full mb-4"></div>
-                            <div className="h-4 bg-slate-200 rounded w-48 mb-2"></div>
-                            <div className="h-3 bg-slate-200 rounded w-32"></div>
-                        </div>
-                     ) : (
-                        <>
-                            <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center mb-4 text-slate-300">
-                                {React.createElement((Icons as any)[featureDef.icon] || Loader2, { className: "w-8 h-8" })}
-                            </div>
-                            <h3 className="text-lg font-bold text-slate-700">Ready to Create?</h3>
-                            <p className="text-slate-400 max-w-xs mt-2 text-sm">Fill out the details on the left and let AI generate professional content for you.</p>
-                        </>
-                     )}
-                  </div>
-               )}
+               {result ? <ResultDisplay result={result} feature={currentView as FeatureType} onRegenerate={() => handleGenerate(currentView as FeatureType, lastFormData!)} isRegenerating={isLoading} formData={lastFormData} /> : <div className="h-full min-h-[400px] flex items-center justify-center bg-white/50 border-2 border-dashed border-slate-200 rounded-3xl text-center p-8"><p className="text-slate-400">Your AI-generated content will appear here.</p></div>}
             </div>
           </div>
         );
@@ -593,26 +435,10 @@ export const App = () => {
   return (
     <div className="flex h-screen bg-[#F7F9FC] overflow-hidden font-sans">
       <SEOManager view={currentView} />
-      {!isAdmin && (
-        <Sidebar 
-          currentView={currentView} 
-          onViewChange={handleNavigate} 
-          isOpen={isSidebarOpen}
-          onCloseMobile={() => setIsSidebarOpen(false)}
-          userProfile={userProfile}
-        />
-      )}
+      {!isAdmin && <Sidebar currentView={currentView} onViewChange={handleNavigate} isOpen={isSidebarOpen} onCloseMobile={() => setIsSidebarOpen(false)} userProfile={userProfile} />}
       <div className="flex-1 flex flex-col h-full overflow-hidden">
-        {!isAdmin && (
-          <TopBar 
-            userPlan={userPlan} 
-            onPlanChange={setUserPlan} 
-            onMenuClick={() => setIsSidebarOpen(true)}
-          />
-        )}
-        <main className="flex-1 overflow-y-auto p-4 md:p-8 relative">
-          {renderMainContent()}
-        </main>
+        {!isAdmin && <TopBar userPlan={userPlan} onPlanChange={setUserPlan} onMenuClick={() => setIsSidebarOpen(true)} />}
+        <main className="flex-1 overflow-y-auto p-4 md:p-8 relative">{renderMainContent()}</main>
       </div>
     </div>
   );
