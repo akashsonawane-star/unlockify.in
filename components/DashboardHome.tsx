@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { ViewState, HistoryItem } from '../types';
 import * as Icons from 'lucide-react';
@@ -9,9 +10,14 @@ interface DashboardHomeProps {
   onNavigate: (view: ViewState) => void;
   recentHistory: HistoryItem[];
   userName?: string;
+  completeness?: {
+    isComplete: boolean;
+    percentage: number;
+    missingFields: string[];
+  };
 }
 
-export const DashboardHome: React.FC<DashboardHomeProps> = ({ onNavigate, recentHistory, userName }) => {
+export const DashboardHome: React.FC<DashboardHomeProps> = ({ onNavigate, recentHistory, userName, completeness }) => {
   // Get time greeting
   const hour = new Date().getHours();
   const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
@@ -21,10 +27,58 @@ export const DashboardHome: React.FC<DashboardHomeProps> = ({ onNavigate, recent
     <div className="max-w-6xl mx-auto space-y-10 animate-fade-in pb-10">
       
       {/* Header */}
-      <div>
-        <h1 className="text-2xl md:text-3xl font-heading font-bold text-slate-900">{greeting}, {displayName}! 👋</h1>
-        <p className="text-slate-500 mt-2">Ready to grow your local business today?</p>
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+        <div>
+          <h1 className="text-2xl md:text-3xl font-heading font-bold text-slate-900">{greeting}, {displayName}! 👋</h1>
+          <p className="text-slate-500 mt-2">Ready to grow your local business today?</p>
+        </div>
+        
+        {/* Simplified Status / Date for top right */}
+        <div className="hidden md:block text-right">
+           <div className="text-xs font-bold text-slate-400 uppercase tracking-widest">{new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}</div>
+        </div>
       </div>
+
+      {/* Profile Completeness Reminder - Only shown if not complete */}
+      {completeness && !completeness.isComplete && (
+        <section className="animate-fade-in-up">
+           <div className="bg-white rounded-3xl border border-purple-100 shadow-sm overflow-hidden relative group">
+              {/* Gradient border effect */}
+              <div className="absolute inset-0 bg-gradient-to-r from-purple-500/5 via-blue-500/5 to-purple-500/5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"></div>
+              
+              <div className="p-6 md:p-8 flex flex-col md:flex-row items-center gap-6 relative z-10">
+                <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-purple-600 to-indigo-700 flex items-center justify-center text-white shadow-lg shadow-purple-200 flex-shrink-0">
+                  <Icons.UserCheck className="w-8 h-8" />
+                </div>
+                
+                <div className="flex-1 text-center md:text-left">
+                  <h3 className="text-lg font-bold text-slate-900 mb-1">Boost your AI content personalization</h3>
+                  <p className="text-sm text-slate-500 mb-4">Complete your business profile to help Unlockify generate 2x more accurate marketing copy for your brand.</p>
+                  
+                  {/* Progress Bar */}
+                  <div className="flex items-center gap-4">
+                     <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden max-w-md">
+                        <div 
+                          className="h-full bg-gradient-to-r from-purple-500 to-indigo-500 transition-all duration-1000 ease-out"
+                          style={{ width: `${completeness.percentage}%` }}
+                        ></div>
+                     </div>
+                     <span className="text-xs font-bold text-purple-600">{Math.round(completeness.percentage)}% Complete</span>
+                  </div>
+                </div>
+
+                <div className="flex-shrink-0">
+                  <button 
+                    onClick={() => onNavigate('profile')}
+                    className="px-6 py-3 bg-slate-900 text-white rounded-xl font-bold hover:bg-slate-800 transition-all flex items-center gap-2 shadow-md hover:shadow-lg transform active:scale-95"
+                  >
+                    Finish Profile <Icons.ArrowRight className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+           </div>
+        </section>
+      )}
 
       {/* Quick Actions */}
       <section>

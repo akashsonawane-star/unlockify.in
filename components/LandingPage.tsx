@@ -36,26 +36,20 @@ const AuthModal: React.FC<{
     try {
         if (mode === 'signup') {
             const data = await onSignUp(email, password, name);
-            if (data?.user) {
-                // If user is created but session is null, email confirmation might be required
-                setIsSuccess(true);
-            }
+            if (data?.user) setIsSuccess(true);
         } else {
             await onSignIn(email, password);
             onClose();
         }
     } catch (err) {
-        // Parent handle errors via props
+        // Errors handled by parent authError prop
     } finally {
         setLoading(false);
     }
   };
 
   const handleResend = async () => {
-    if (!email) {
-        alert("Enter your email first.");
-        return;
-    }
+    if (!email) return;
     setResendLoading(true);
     const success = await onResendVerification(email);
     if (success) {
@@ -65,40 +59,22 @@ const AuthModal: React.FC<{
     setResendLoading(false);
   };
 
-  const errorMessage = authError || null;
-
   if (isSuccess) {
     return (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-slate-900/95 backdrop-blur-md text-slate-900 animate-fade-in">
-           <div className="bg-white rounded-[2.5rem] w-full max-w-md p-10 shadow-2xl relative text-center border border-slate-100">
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-slate-900/95 backdrop-blur-md text-slate-900 animate-fade-in text-center">
+           <div className="bg-white rounded-[2.5rem] w-full max-w-md p-10 shadow-2xl relative border border-slate-100">
               <button onClick={onClose} className="absolute top-8 right-8 text-slate-400 hover:text-slate-600 transition-colors"><Icons.X /></button>
-              
-              <div className="w-20 h-20 bg-purple-50 text-[#6E27FF] rounded-full flex items-center justify-center mx-auto mb-6">
-                  <Icons.MailCheck className="w-10 h-10" />
-              </div>
-              
+              <div className="w-20 h-20 bg-purple-50 text-[#6E27FF] rounded-full flex items-center justify-center mx-auto mb-6"><Icons.MailCheck className="w-10 h-10" /></div>
               <h2 className="text-2xl font-bold mb-4 font-heading">Check Your Email</h2>
-              <p className="text-slate-500 text-sm mb-8 leading-relaxed">
-                  We've sent a magic link to <span className="text-slate-900 font-bold">{email}</span>.<br/> 
-                  Click it to activate your business profile.
-              </p>
-              
+              <p className="text-slate-500 text-sm mb-8 leading-relaxed">We've sent a magic link to <span className="text-slate-900 font-bold">{email}</span>. Click it to activate your business profile.</p>
               <div className="space-y-4">
-                 <button 
-                    onClick={handleResend} 
-                    disabled={resendLoading} 
-                    className="w-full py-4 bg-slate-900 text-white rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-slate-800 transition-all shadow-lg"
-                 >
+                 <button onClick={handleResend} disabled={resendLoading} className="w-full py-4 bg-slate-900 text-white rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-slate-800 transition-all shadow-lg">
                     {resendLoading ? <Icons.Loader2 className="animate-spin w-5 h-5" /> : <Icons.RefreshCw className="w-4 h-4" />}
                     {resendStatus || "Resend Verification Link"}
                  </button>
-                 
                  <div className="pt-6 border-t border-slate-100 flex flex-col gap-3">
                     <p className="text-[11px] text-slate-400 font-medium">Mail not arriving? Check Spam or try below:</p>
-                    <button 
-                        onClick={() => onGuestLogin(email, name || 'Business Owner')} 
-                        className="w-full py-3 bg-slate-100 text-slate-700 rounded-xl font-bold text-xs hover:bg-slate-200 transition-all flex items-center justify-center gap-2"
-                    >
+                    <button onClick={() => onGuestLogin(email, name || 'Business Owner')} className="w-full py-3 bg-slate-100 text-slate-700 rounded-xl font-bold text-xs hover:bg-slate-200 transition-all flex items-center justify-center gap-2">
                         <Icons.Zap className="w-3 h-3 text-orange-500" /> Enter Dashboard (Skip Verification)
                     </button>
                     <button onClick={() => { setIsSuccess(false); setMode('signin'); }} className="text-xs text-slate-400 hover:text-slate-600 font-bold underline">Back to Log In</button>
@@ -112,25 +88,16 @@ const AuthModal: React.FC<{
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm animate-fade-in text-slate-900">
        <div className="bg-white rounded-[2.5rem] w-full max-w-md p-8 md:p-10 shadow-2xl relative border border-slate-100">
-          <button onClick={onClose} className="absolute top-8 right-8 text-slate-300 hover:text-slate-600 transition-colors">
-            <Icons.X className="w-6 h-6" />
-          </button>
-          
+          <button onClick={onClose} className="absolute top-8 right-8 text-slate-300 hover:text-slate-600 transition-colors"><Icons.X className="w-6 h-6" /></button>
           <div className="text-center mb-8">
-             <div className="flex justify-center mb-6">
-                <BrandLogo withText={false} className="w-14 h-14" />
-             </div>
-             <h2 className="text-2xl font-bold text-slate-900 font-heading">
-                {mode === 'signup' ? 'Create Account' : 'Welcome Back'}
-             </h2>
+             <div className="flex justify-center mb-6"><BrandLogo withText={false} className="w-14 h-14" /></div>
+             <h2 className="text-2xl font-bold text-slate-900 font-heading">{mode === 'signup' ? 'Create Account' : 'Welcome Back'}</h2>
              <p className="text-slate-500 text-sm mt-2">Unlock AI Marketing for your brand.</p>
           </div>
-
           <div className="flex bg-slate-100 p-1 rounded-xl mb-6">
              <button onClick={() => setMode('signup')} className={`flex-1 py-2.5 text-xs font-bold rounded-lg transition-all ${mode === 'signup' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500'}`}>Sign Up</button>
              <button onClick={() => setMode('signin')} className={`flex-1 py-2.5 text-xs font-bold rounded-lg transition-all ${mode === 'signin' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500'}`}>Log In</button>
           </div>
-
           <form onSubmit={handleSubmit} className="space-y-4">
              {mode === 'signup' && (
                 <div className="relative">
@@ -144,13 +111,21 @@ const AuthModal: React.FC<{
              </div>
              <div className="relative">
                 <Icons.Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                <input type="password" required minLength={6} value={password} onChange={(e) => setPassword(e.target.value)} className="w-full pl-10 pr-4 py-3.5 rounded-xl border border-slate-200 text-sm outline-none focus:border-[#6E27FF] transition-all bg-slate-50" placeholder="Create Password" />
+                <input 
+                  type="password" 
+                  required 
+                  minLength={6} 
+                  value={password} 
+                  onChange={(e) => setPassword(e.target.value)} 
+                  className="w-full pl-10 pr-4 py-3.5 rounded-xl border border-slate-200 text-sm outline-none focus:border-[#6E27FF] transition-all bg-slate-50" 
+                  placeholder={mode === 'signup' ? 'Create Password' : 'Password'} 
+                />
              </div>
 
-             {errorMessage && (
+             {authError && (
                <div className="p-3 bg-red-50 border border-red-100 text-red-600 text-[11px] rounded-xl flex items-start gap-2 animate-shake">
                   <Icons.AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                  <span className="font-bold leading-relaxed">{errorMessage}</span>
+                  <span className="font-bold leading-relaxed">{authError}</span>
                </div>
              )}
 
@@ -158,11 +133,8 @@ const AuthModal: React.FC<{
                 {loading ? <Icons.Loader2 className="animate-spin w-5 h-5" /> : (mode === 'signup' ? 'Join Now Free' : 'Sign In')}
              </button>
           </form>
-
           <div className="mt-8 text-center pt-4 border-t border-slate-50">
-              <button onClick={() => onGuestLogin('demo@unlockify.in', 'Guest User')} className="text-[11px] text-slate-400 hover:text-[#6E27FF] font-medium underline transition-colors">
-                  Check out the Demo Preview
-              </button>
+              <button onClick={() => onGuestLogin('demo@unlockify.in', 'Guest User')} className="text-[11px] text-slate-400 hover:text-[#6E27FF] font-medium underline transition-colors">Check out the Demo Preview</button>
           </div>
        </div>
     </div>
@@ -183,17 +155,13 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onSignUp, onSignIn, on
             </div>
         </div>
       </nav>
-      
       <section className="pt-40 pb-32 px-6 text-center max-w-4xl mx-auto relative overflow-hidden">
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-96 h-96 bg-purple-200/40 rounded-full blur-[100px] -z-10"></div>
         <h1 className="text-5xl md:text-7xl font-bold font-heading mb-6 leading-tight tracking-tight">AI Marketing for <span className="gradient-text">Your Business</span></h1>
         <p className="text-lg text-slate-500 mb-10 max-w-2xl mx-auto leading-relaxed">Stop wasting hours on social media. Let AI handle your Instagram, WhatsApp, and Reels marketing effortlessly.</p>
         <button onClick={() => setShowAuth(true)} className="px-10 py-4 bg-gradient-to-r from-[#6E27FF] to-[#3F8CFF] text-white rounded-full font-bold text-xl shadow-2xl hover:scale-105 transition-all">Get Started — It's Free</button>
       </section>
-      
-      <div className="max-w-7xl mx-auto px-6 mb-20">
-         <ComingSoonSection />
-      </div>
+      <div className="max-w-7xl mx-auto px-6 mb-20"><ComingSoonSection /></div>
     </div>
   );
 };

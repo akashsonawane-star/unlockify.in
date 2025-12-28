@@ -1,38 +1,52 @@
+
 import { GoogleGenAI, Modality } from "@google/genai";
 import { SYSTEM_INSTRUCTION } from "../constants";
 import { FormData, UserPlan, FeatureType, AIResponseData } from "../types";
 
-// Removed global 'ai' instance to avoid stale API keys as per guidelines
+/**
+ * Normalizes error messages for Gemini API.
+ */
+const isNetworkError = (err: any): boolean => {
+  const msg = err?.message?.toLowerCase() || "";
+  return msg.includes('failed to fetch') || msg.includes('networkerror') || err instanceof TypeError;
+};
+
+/**
+ * Generates marketing text content using Gemini 3 Flash.
+ */
 export const generateContent = async (
   feature: FeatureType,
   formData: FormData,
   userPlan: UserPlan
 ): Promise<AIResponseData> => {
-  // Always create a new instance right before making an API call to ensure it uses the latest API key
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  if (!navigator.onLine) {
+    return { 
+      success: false, 
+      error: true, 
+      type: feature, 
+      user_plan: userPlan, 
+      data: {}, 
+      code: "OFFLINE", 
+      message: "No internet connection detected." 
+    };
+  }
 
-  // 1. Construct the input JSON for the model
-  const promptInput = {
-    user_plan: userPlan,
-    feature: feature,
-    inputs: {
-      business_type: formData.businessType,
-      business_name: formData.businessName,
-      city: formData.city,
-      language: formData.language,
-      tone: formData.tone,
-      offer_details: formData.offerDetails,
-      festival_name: formData.festivalName || "",
-      duration: formData.duration || "15s",
-      objective: formData.objective || "Awareness",
-      hook_style: formData.hookStyle || "Emotional",
-      target_audience: formData.targetAudience || "General Public",
-      // New Reel Specific Inputs
-      voice_gender: formData.voiceGender || "Female",
-      visual_style: formData.visualStyle || "Cinematic",
-      count: 1 // Internal logic handles variations based on plan
-    }
-  };
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  
+  const textPrompt = `
+    Generate high-quality marketing content for the following business:
+    Feature: ${feature}
+    Plan: ${userPlan}
+    Business Type: ${formData.businessType}
+    Business Name: ${formData.businessName}
+    City: ${formData.city}
+    Language: ${formData.language}
+    Tone: ${formData.tone}
+    Offer/Details: ${formData.offerDetails}
+    Objective: ${formData.objective || "Awareness"}
+    Target Audience: ${formData.targetAudience || "General Public"}
+    ${formData.festivalName ? `Festival: ${formData.festivalName}` : ""}
+  `;
 
   let attempts = 0;
   const maxAttempts = 2;
@@ -41,67 +55,34 @@ export const generateContent = async (
     attempts++;
     try {
       const response = await ai.models.generateContent({
-        // Updated model to gemini-3-flash-preview for text-based tasks
         model: 'gemini-3-flash-preview',
-        contents: JSON.stringify(promptInput),
+        contents: textPrompt,
         config: {
           systemInstruction: SYSTEM_INSTRUCTION,
           responseMimeType: "application/json",
-          // Higher temperature for creativity in marketing
-          temperature: 0.75, 
-          // Relaxed safety settings for marketing content
-          safetySettings: [
-            { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_ONLY_HIGH' },
-            { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_ONLY_HIGH' },
-            { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_ONLY_HIGH' },
-            { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_ONLY_HIGH' },
-          ],
+          temperature: 0.8,
         }
       });
 
-      let text = response.text;
-      if (!text) {
-        throw new Error("No response text from AI");
-      }
+      const text = response.text || "";
+      if (!text) throw new Error("Empty AI response");
 
-      // Robust CLEANUP
-      text = text.trim();
-      
-      // Attempt to extract JSON if embedded in other text
-      // We look for the first '{' and the last '}' to handle any preamble/postamble
       const jsonStart = text.indexOf('{');
       const jsonEnd = text.lastIndexOf('}');
-      if (jsonStart !== -1 && jsonEnd !== -1) {
-          text = text.substring(jsonStart, jsonEnd + 1);
-      } else {
-         // Fallback: Sometimes models output markdown code blocks even with MIME type set
-         // This is a backup cleanup
-         text = text.replace(/```json/g, "").replace(/```/g, "").trim();
-      }
+      const cleanedJson = jsonStart !== -1 && jsonEnd !== -1 ? text.substring(jsonStart, jsonEnd + 1) : text;
 
-      let jsonResponse: AIResponseData;
-      try {
-        jsonResponse = JSON.parse(text) as AIResponseData;
-      } catch (parseError) {
-        console.error("JSON Parse Error:", parseError, "Text:", text);
-        // If strict parsing fails, try a looser regex extraction for keys if needed, 
-        // but usually checking the prompt or model config is better. 
-        // For now, we throw to trigger retry.
-        throw new Error("Invalid JSON format received from AI");
-      }
-
-      // Check for backend-style errors embedded in success response if any
+      let jsonResponse = JSON.parse(cleanedJson) as AIResponseData;
+      
       if (!jsonResponse.success && !jsonResponse.error) {
-         // If the model generated valid JSON but indicated failure logically
-         throw new Error(jsonResponse.message || "AI indicated failure");
+        throw new Error(jsonResponse.message || "AI indicated a logical failure");
       }
-
+      
       return jsonResponse;
 
-    } catch (error) {
-      console.error(`Gemini API Error (Attempt ${attempts}):`, error);
+    } catch (error: any) {
+      console.error(`Gemini Text API Error (Attempt ${attempts}):`, error);
+      const isFetchError = isNetworkError(error);
       
-      // If last attempt failed
       if (attempts >= maxAttempts) {
         return {
           success: false,
@@ -109,47 +90,56 @@ export const generateContent = async (
           type: feature,
           user_plan: userPlan,
           data: {},
-          code: "API_ERROR",
-          message: "We faced a glitch generating your content. Please try clicking 'Generate' again."
+          code: isFetchError ? "CONNECTION_ERROR" : "API_ERROR",
+          message: isFetchError ? "Network error. Please try again." : "Failed to generate content."
         };
       }
-      // Wait a bit before retry
       await new Promise(resolve => setTimeout(resolve, 1000));
     }
   }
   
-  return {
-      success: false,
-      error: true,
-      type: feature,
-      user_plan: userPlan,
-      data: {},
-      code: "UNKNOWN_ERROR",
-      message: "An unknown error occurred."
+  return { 
+    success: false, 
+    error: true, 
+    type: feature, 
+    user_plan: userPlan, 
+    data: {}, 
+    message: "Unexpected error." 
   };
 };
 
+/**
+ * Generates high-quality 4K marketing images using Gemini 3 Pro Image.
+ */
 export const generateMarketingImage = async (
   prompt: string, 
   aspectRatio: '1:1' | '9:16' = '1:1'
 ): Promise<string | null> => {
+  if (!navigator.onLine) return null;
+
+  if (window.aistudio) {
+    const hasKey = await window.aistudio.hasSelectedApiKey();
+    if (!hasKey) {
+      await window.aistudio.openSelectKey();
+    }
+  }
+
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  
   try {
-    // Re-initialize for dynamic key selection compliance
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash-image',
-      contents: {
-        parts: [{ text: `Create a professional, high-quality social media marketing image. ${prompt}. Photorealistic, vibrant colors, advertising style, 4k.` }],
+      model: 'gemini-3-pro-image-preview',
+      contents: { 
+        parts: [{ text: `Professional high-end advertising photography, 4k resolution, cinematic lighting: ${prompt}. Photorealistic, premium commercial grade, highly detailed.` }] 
       },
-      config: {
-        imageConfig: {
+      config: { 
+        imageConfig: { 
           aspectRatio: aspectRatio,
-          // imageSize removed as it is not supported in 2.5 flash image
-        }
+          imageSize: "4K"
+        } 
       },
     });
 
-    // Iterate through parts to find the image
     if (response.candidates?.[0]?.content?.parts) {
       for (const part of response.candidates[0].content.parts) {
         if (part.inlineData && part.inlineData.data) {
@@ -158,14 +148,21 @@ export const generateMarketingImage = async (
       }
     }
     return null;
-  } catch (error) {
+  } catch (error: any) {
     console.error("Image Gen Error:", error);
+    if ((error?.message?.includes("Requested entity was not found") || isNetworkError(error)) && window.aistudio) {
+      await window.aistudio.openSelectKey();
+    }
     return null;
   }
 };
 
+/**
+ * Generates marketing videos using Veo.
+ */
 export const generateReelVideo = async (prompt: string): Promise<string | null> => {
-  // Check API Key first using the provided logic
+  if (!navigator.onLine) return null;
+  
   if (window.aistudio) {
       const hasKey = await window.aistudio.hasSelectedApiKey();
       if (!hasKey) {
@@ -173,45 +170,50 @@ export const generateReelVideo = async (prompt: string): Promise<string | null> 
       }
   }
 
-  // Create new instance with potentially new key (important for Veo key selection flow)
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY }); 
-  
   try {
     let operation = await ai.models.generateVideos({
       model: 'veo-3.1-fast-generate-preview',
       prompt: prompt,
-      config: {
-        numberOfVideos: 1,
-        resolution: '720p',
-        aspectRatio: '9:16'
+      config: { 
+        numberOfVideos: 1, 
+        resolution: '720p', 
+        aspectRatio: '9:16' 
       }
     });
 
+    let retryCount = 0;
     while (!operation.done) {
-      await new Promise(resolve => setTimeout(resolve, 5000)); // 5s poll
-      operation = await ai.operations.getVideosOperation({operation: operation});
+      try {
+        await new Promise(resolve => setTimeout(resolve, 10000));
+        operation = await ai.operations.getVideosOperation({operation: operation});
+        retryCount = 0; // Reset on success
+      } catch (pollError) {
+        if (isNetworkError(pollError) && retryCount < 3) {
+           retryCount++;
+           continue; 
+        }
+        throw pollError;
+      }
     }
 
     const videoUri = operation.response?.generatedVideos?.[0]?.video?.uri;
-    if (videoUri) {
-        return `${videoUri}&key=${process.env.API_KEY}`;
-    }
-    return null;
+    return videoUri ? `${videoUri}&key=${process.env.API_KEY}` : null;
   } catch (e: any) {
     console.error("Video Generation Error", e);
-    // If "Requested entity was not found" -> reset key
-    const errorMessage = e?.message || "";
-    if (errorMessage.includes("Requested entity was not found") && window.aistudio) {
+    if ((e?.message?.includes("Requested entity was not found") || isNetworkError(e)) && window.aistudio) {
         await window.aistudio.openSelectKey();
     }
     return null;
   }
 }
 
+/**
+ * Generates marketing voiceovers using TTS.
+ */
 export const generateReelAudio = async (text: string, gender: 'Male' | 'Female' | 'Duo'): Promise<string | null> => {
-    // Re-initialize for dynamic key selection compliance
+    if (!navigator.onLine) return null;
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-    // Map gender to voices
     const voiceName = gender === 'Male' ? 'Fenrir' : 'Kore'; 
     
     try {
@@ -220,20 +222,17 @@ export const generateReelAudio = async (text: string, gender: 'Male' | 'Female' 
             contents: [{ parts: [{ text: text }] }],
             config: {
                 responseModalities: [Modality.AUDIO],
-                speechConfig: {
-                    voiceConfig: {
-                        prebuiltVoiceConfig: { voiceName: voiceName },
-                    },
+                speechConfig: { 
+                  voiceConfig: { 
+                    prebuiltVoiceConfig: { voiceName: voiceName } 
+                  } 
                 },
             },
         });
-        
         const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-        if (base64Audio) {
-            // Note: Returning as data:audio/mp3;base64 for simple consumption, though raw bytes are PCM
-            return `data:audio/mp3;base64,${base64Audio}`;
-        }
-        return null;
+        // NOTE: The audio is raw PCM. We return it as is, and it should be handled by the consumer.
+        // For simple <audio> tags, we prefix it, but for real usage, decoding is required.
+        return base64Audio ? `data:audio/pcm;base64,${base64Audio}` : null;
     } catch (e) {
         console.error("Audio Generation Error", e);
         return null;
