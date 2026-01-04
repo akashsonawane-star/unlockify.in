@@ -138,7 +138,7 @@ export const DashboardHome: React.FC<DashboardHomeProps> = ({ onNavigate, recent
             <h3 className="text-2xl font-bold font-heading">Unlock Unlimited Growth 🚀</h3>
             <p className="text-blue-100 max-w-lg">Get 30-day marketing calendars, GMB management, long-form content, and remove all daily limits.</p>
           </div>
-          <button className="bg-white text-[#6E27FF] px-8 py-3 rounded-full font-bold shadow-xl hover:shadow-2xl hover:scale-105 transition-all">
+          <button onClick={() => onNavigate('subscription')} className="bg-white text-[#6E27FF] px-8 py-3 rounded-full font-bold shadow-xl hover:shadow-2xl hover:scale-105 transition-all">
             Upgrade to Growth
           </button>
         </div>

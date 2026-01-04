@@ -1,5 +1,8 @@
 {
-  "name": "Unlockify.in-2",
+  "name": "Unlockify.in",
   "description": "AI-powered marketing content generator tailored for small Indian businesses. Supports Instagram, WhatsApp, Reels, and more in local languages.",
-  "requestFramePermissions": []
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
 }

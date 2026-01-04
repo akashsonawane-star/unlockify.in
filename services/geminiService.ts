@@ -31,6 +31,7 @@ export const generateContent = async (
     };
   }
 
+  // Create instance right before call as per guidelines
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   
   const textPrompt = `
@@ -67,9 +68,12 @@ export const generateContent = async (
       const text = response.text || "";
       if (!text) throw new Error("Empty AI response");
 
-      const jsonStart = text.indexOf('{');
-      const jsonEnd = text.lastIndexOf('}');
-      const cleanedJson = jsonStart !== -1 && jsonEnd !== -1 ? text.substring(jsonStart, jsonEnd + 1) : text;
+      // Robust JSON extraction
+      let cleanedJson = text;
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+          cleanedJson = jsonMatch[0];
+      }
 
       let jsonResponse = JSON.parse(cleanedJson) as AIResponseData;
       
@@ -81,6 +85,12 @@ export const generateContent = async (
 
     } catch (error: any) {
       console.error(`Gemini Text API Error (Attempt ${attempts}):`, error);
+      
+      // Handle API Key issues
+      if (error?.message?.includes("Requested entity was not found") && window.aistudio) {
+          await window.aistudio.openSelectKey();
+      }
+
       const isFetchError = isNetworkError(error);
       
       if (attempts >= maxAttempts) {
@@ -91,7 +101,7 @@ export const generateContent = async (
           user_plan: userPlan,
           data: {},
           code: isFetchError ? "CONNECTION_ERROR" : "API_ERROR",
-          message: isFetchError ? "Network error. Please try again." : "Failed to generate content."
+          message: isFetchError ? "Network error. Please try again." : "Failed to generate content. Please check your prompt."
         };
       }
       await new Promise(resolve => setTimeout(resolve, 1000));
@@ -104,7 +114,7 @@ export const generateContent = async (
     type: feature, 
     user_plan: userPlan, 
     data: {}, 
-    message: "Unexpected error." 
+    message: "An unexpected error occurred." 
   };
 };
 
@@ -230,8 +240,6 @@ export const generateReelAudio = async (text: string, gender: 'Male' | 'Female' 
             },
         });
         const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-        // NOTE: The audio is raw PCM. We return it as is, and it should be handled by the consumer.
-        // For simple <audio> tags, we prefix it, but for real usage, decoding is required.
         return base64Audio ? `data:audio/pcm;base64,${base64Audio}` : null;
     } catch (e) {
         console.error("Audio Generation Error", e);
